@@ -3,6 +3,7 @@ import urllib
 import typing
 import http
 import re
+import pathlib
 
 
 @guidance
@@ -16,7 +17,7 @@ def image(lm, src, allow_local=True):
             bytes_data = response.read()
 
     # ...from a local path
-    elif allow_local and isinstance(src, str):
+    elif allow_local and (isinstance(src, str) or isinstance(src, pathlib.Path)):
         with open(src, "rb") as f:
             bytes_data = f.read()
 
