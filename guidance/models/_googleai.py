@@ -106,7 +106,7 @@ class GoogleAI(Grammarless):
 
 
 class GoogleAIChatEngine(GoogleAIEngine):
-    def _generator(self, prompt, temperature):
+    def _generator(self, prompt, temperature, context_variables=None):
 
         # find the system text
         pos = 0
@@ -171,7 +171,9 @@ class GoogleAIChatEngine(GoogleAIEngine):
         # TODO: don't make a new session on every call
         # last_user_text = messages.pop().content
 
-        return self._start_generator(system_text.decode("utf8"), messages, temperature)
+        return self._start_generator(
+            system_text.decode("utf8"), messages, temperature, context_variables
+        )
 
         # kwargs = {}
         # if self.max_streaming_tokens is not None:
@@ -188,7 +190,9 @@ class GoogleAIChatEngine(GoogleAIEngine):
         out = self.model_obj.start_chat(history=messages)
         return out
 
-    def _start_generator(self, system_text, messages, temperature):
+    def _start_generator(
+        self, system_text, messages, temperature, context_variables=None
+    ):
         from google.ai.generativelanguage import Content, Part, Blob
 
         # last_user_text = messages[-1]["content"]
@@ -205,10 +209,13 @@ class GoogleAIChatEngine(GoogleAIEngine):
                 # append any image
                 if i + 1 < len(raw_parts):
                     # parts.append(Part.from_image(Image.from_bytes(self[raw_parts[i+1]])))
+                    assert context_variables is not None
+                    assert raw_parts[i + 1] in context_variables
                     parts.append(
                         Part(
                             inline_data=Blob(
-                                mime_type="image/jpeg", data=self[raw_parts[i + 1]]
+                                mime_type="image/jpeg",
+                                data=context_variables[raw_parts[i + 1]],
                             )
                         )
                     )

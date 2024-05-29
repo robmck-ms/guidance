@@ -9,6 +9,7 @@ from ._model import Tokenizer, Engine, Model, format_pattern, ConstraintExceptio
 from ..chat import ChatMLTemplate
 
 import warnings
+
 logger = logging.getLogger(__name__)
 
 
@@ -125,9 +126,9 @@ class GrammarlessEngine(Engine):
         # this is where the streaming thread puts results
         self._data_queue = queue.Queue()
         self._data = b""  # these are the bytes we are ready to use in the main thread
-        
+
         # this is phrased negatively so we can wait for the stop event
-        self._not_running_stream = threading.Event() 
+        self._not_running_stream = threading.Event()
         self._last_call = 0
         self._num_calls_made = 0
         self._current_temp = 0
@@ -143,10 +144,12 @@ class GrammarlessEngine(Engine):
             tokenizer = GrammarlessTokenizer(tokenizer)
 
         # GrammarlessEngines must use the ChatML tokenizer
-        # TODO: Consider different enforcement of this 
+        # TODO: Consider different enforcement of this
         if tokenizer.chat_template is not ChatMLTemplate:
-            raise Exception("The tokenizer provided to the engine follows a non-ChatML format in its chat_template. \
-                    Using a transformers, tiktoken, or guidance.GrammarlessTokenizer directly will solve this issue.")
+            raise Exception(
+                "The tokenizer provided to the engine follows a non-ChatML format in its chat_template. \
+                    Using a transformers, tiktoken, or guidance.GrammarlessTokenizer directly will solve this issue."
+            )
         # build the Engine
         super().__init__(tokenizer=tokenizer, compute_log_probs=compute_log_probs)
 
@@ -188,7 +191,7 @@ class GrammarlessEngine(Engine):
             b""
         )  # so we never get stuck waiting for a running stream to return something
 
-    def _start_new_stream(self, prompt, temperature):
+    def _start_new_stream(self, prompt, temperature, **generator_kwargs):
 
         # make sure the display is up to date (since we are about to delay for a while)
         # TODO: how can we handle this better since the engine is now separate from the client?
@@ -213,7 +216,7 @@ class GrammarlessEngine(Engine):
         self._used_bytes_len = 0
         self._current_temp = temperature
         self._last_call = time.time()
-        generator = self._generator(prompt, temperature)
+        generator = self._generator(prompt, temperature, **generator_kwargs)
         self._not_running_stream.clear()  # so we know we are running
         self._num_calls_made += 1
         self._remote_thread = threading.Thread(
@@ -228,7 +231,7 @@ class GrammarlessEngine(Engine):
         self._data = new_data
         self._last_stream_start = self._data
 
-    def get_logits(self, token_ids, forced_bytes, current_temp):
+    def get_logits(self, token_ids, forced_bytes, current_temp, **generator_kwargs):
         """Computes the logits for the given token state.
 
         This overrides a method from the Local class that is used to get
@@ -350,7 +353,7 @@ class GrammarlessEngine(Engine):
                     "starting a new stream because there is no data to read and no stream running..."
                 )
                 restarted = True
-                self._start_new_stream(prompt, current_temp)
+                self._start_new_stream(prompt, current_temp, **generator_kwargs)
 
             # we wait for the running stream to put something in the queue
             else:

@@ -117,7 +117,9 @@ class GeminiChatEngine(VertexAIChatEngine):
         out = self.model_obj.start_chat(history=messages)
         return out
 
-    def _start_generator(self, system_text, messages, temperature):
+    def _start_generator(
+        self, system_text, messages, temperature, context_variables=None
+    ):
         # last_user_text = messages[-1]["content"]
         formated_messages = []
         for m in messages:
@@ -131,8 +133,12 @@ class GeminiChatEngine(VertexAIChatEngine):
 
                 # append any image
                 if i + 1 < len(raw_parts):
+                    assert context_variables is not None
+                    assert raw_parts[i + 1] in context_variables
                     parts.append(
-                        Part.from_image(Image.from_bytes(self[raw_parts[i + 1]]))
+                        Part.from_image(
+                            Image.from_bytes(context_variables[raw_parts[i + 1]])
+                        )
                     )
             formated_messages.append(Content(role=m["role"], parts=parts))
         last_user_parts = (

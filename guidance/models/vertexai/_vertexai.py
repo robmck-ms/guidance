@@ -181,7 +181,7 @@ class VertexAIChat(VertexAI, Chat):
 
 class VertexAIChatEngine(VertexAIEngine):
 
-    def _generator(self, prompt, temperature):
+    def _generator(self, prompt, temperature, context_variables=None):
 
         # find the system text
         pos = 0
@@ -246,7 +246,9 @@ class VertexAIChatEngine(VertexAIEngine):
         # TODO: don't make a new session on every call
         # last_user_text = messages.pop().content
 
-        return self._start_generator(system_text.decode("utf8"), messages, temperature)
+        return self._start_generator(
+            system_text.decode("utf8"), messages, temperature, context_variables
+        )
 
         # kwargs = {}
         # if self.max_streaming_tokens is not None:
