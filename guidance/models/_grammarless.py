@@ -9,6 +9,7 @@ from ._model import Tokenizer, Engine, Model, format_pattern, ConstraintExceptio
 from ..chat import ChatMLTemplate
 
 import warnings
+
 logger = logging.getLogger(__name__)
 
 
@@ -125,9 +126,9 @@ class GrammarlessEngine(Engine):
         # this is where the streaming thread puts results
         self._data_queue = queue.Queue()
         self._data = b""  # these are the bytes we are ready to use in the main thread
-        
+
         # this is phrased negatively so we can wait for the stop event
-        self._not_running_stream = threading.Event() 
+        self._not_running_stream = threading.Event()
         self._last_call = 0
         self._num_calls_made = 0
         self._current_temp = 0
@@ -143,10 +144,12 @@ class GrammarlessEngine(Engine):
             tokenizer = GrammarlessTokenizer(tokenizer)
 
         # GrammarlessEngines must use the ChatML tokenizer
-        # TODO: Consider different enforcement of this 
+        # TODO: Consider different enforcement of this
         if tokenizer.chat_template is not ChatMLTemplate:
-            raise Exception("The tokenizer provided to the engine follows a non-ChatML format in its chat_template. \
-                    Using a transformers, tiktoken, or guidance.GrammarlessTokenizer directly will solve this issue.")
+            raise Exception(
+                "The tokenizer provided to the engine follows a non-ChatML format in its chat_template. \
+                    Using a transformers, tiktoken, or guidance.GrammarlessTokenizer directly will solve this issue."
+            )
         # build the Engine
         super().__init__(tokenizer=tokenizer, compute_log_probs=compute_log_probs)
 
@@ -253,7 +256,7 @@ class GrammarlessEngine(Engine):
 
             # if the generation temperature changes we have to restart
             if self._current_temp != current_temp:
-                self._start_new_stream(prompt, current_temp)
+                self._start_new_stream(prompt, current_temp, **generator_kwargs)
                 continue
 
             # try and get the next token id
@@ -267,7 +270,7 @@ class GrammarlessEngine(Engine):
                     )
                     if current_temp > 0 and self._used_bytes_len >= new_used_len:
                         token_id = None
-                        self._start_new_stream(prompt, current_temp)
+                        self._start_new_stream(prompt, current_temp, **generator_kwargs)
                         continue
 
                     # ...otherwise we have found the token id we want to emit
@@ -329,7 +332,7 @@ class GrammarlessEngine(Engine):
                     f"restarting a stream because the data we have does not match the ids. We have {str(self._data)} but the prompt is {str(prompt)}"
                 )
                 restarted = True
-                self._start_new_stream(prompt, current_temp)
+                self._start_new_stream(prompt, current_temp, **generator_kwargs)
 
             # extend our data with a chunk from the model stream
             if not self._data_queue.empty():
