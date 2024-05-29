@@ -1,4 +1,6 @@
+import base64
 import os
+import re
 import typing
 
 import diskcache as dc
@@ -16,6 +18,9 @@ try:
     client_class: typing.Optional[typing.Type[openai.OpenAI]] = openai.OpenAI
 except ImportError:
     client_class = None
+
+
+_image_token_re = re.compile(r"<\|_image:(.*)\|>")
 
 
 class OpenAIEngine(GrammarlessEngine):
@@ -53,7 +58,7 @@ class OpenAIEngine(GrammarlessEngine):
 
         super().__init__(tokenizer, max_streaming_tokens, timeout, compute_log_probs)
 
-    def _generator_completion(self, prompt, temperature):
+    def _generator_completion(self, prompt, temperature, context_variables=None):
         # Only runs on legacy openAI models that use old completion endpoints.
         self._reset_shared_data(prompt, temperature)  # update our shared data state
 
@@ -81,7 +86,7 @@ class OpenAIEngine(GrammarlessEngine):
             self.metrics.engine_output_tokens += len(self.tokenizer(chunk))
             yield chunk.encode("utf8")
 
-    def _generator_chat(self, prompt, temperature):
+    def _generator_chat(self, prompt, temperature, context_variables=None):
         # find the role tags
         pos = 0
         role_end = b"<|im_end|>\n"
@@ -123,6 +128,52 @@ class OpenAIEngine(GrammarlessEngine):
             to appropriately format your guidance program for this type of model."
             )
 
+        # Reformat messages to include images if they are present
+        formatted_messages = []
+        for message in messages:
+            parts = _image_token_re.split(message["content"])
+            if len(parts) == 1:
+                formatted_messages.append(message)
+                continue
+
+            # There are images so we have to break the message up into
+            # several sub-messages for OpenAI's API
+            new_message = message.copy()
+            new_message["content"] = sub_messages = []
+            for i in range(0, len(parts), 2):
+                # With the above split, we will walk through parts in pairs, the
+                # first part will be text (may be ""), and the second part, if
+                # present, will be an image id.
+
+                # Add the text part if it exists
+                if parts[i]:
+                    sub_messages.append({"type": "text", "text": parts[i]})
+
+                # Add the image part if it exists
+                if i + 1 < len(parts):
+                    image_id = parts[i + 1]
+                    assert (
+                        context_variables is not None
+                    ), "No context variables provided!"
+                    assert image_id in context_variables, f"Image {image_id} not found!"
+                    image_data = base64.b64encode(context_variables[image_id]).decode(
+                        "utf8"
+                    )
+                    # TODO: MIME type should to be controllable, or saved by guidance.image()
+                    image_url = f"data:image/jpeg;base64,{image_data}"
+                    sub_messages.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": image_url,
+                                "detail": "auto",  # TODO: this should be controllable
+                            },
+                        },
+                    )
+            formatted_messages.append(new_message)
+
+        messages = formatted_messages
+
         # Update shared data state
         self._reset_shared_data(prompt[:pos], temperature)
 
@@ -155,12 +206,12 @@ class OpenAIEngine(GrammarlessEngine):
             # TODO: add retry logic, keeping mind of token counts
             raise e
 
-    def _generator(self, prompt, temperature):
+    def _generator(self, prompt, temperature, context_variables=None):
         if self.model_name in self._completion_models:
-            return self._generator_completion(prompt, temperature)
+            return self._generator_completion(prompt, temperature, context_variables)
         else:
             # Otherwise we are in a chat context
-            return self._generator_chat(prompt, temperature)
+            return self._generator_chat(prompt, temperature, context_variables)
 
 
 class OpenAI(Grammarless):
