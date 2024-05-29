@@ -17,7 +17,7 @@ from ._vertexai import (
     VertexAIChatEngine,
 )
 
-_image_token_pattern = re.compile(r"<\|_image:(.*)\|>")
+_image_token_pattern = re.compile(r"<\|_image:(.*?)\|>")
 
 try:
     from vertexai.language_models import (

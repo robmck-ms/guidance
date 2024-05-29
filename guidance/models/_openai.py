@@ -20,7 +20,7 @@ except ImportError:
     client_class = None
 
 
-_image_token_re = re.compile(r"<\|_image:(.*)\|>")
+_image_token_re = re.compile(r"<\|_image:(.*?)\|>")
 
 
 class OpenAIEngine(GrammarlessEngine):

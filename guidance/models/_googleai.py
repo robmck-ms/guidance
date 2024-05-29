@@ -4,7 +4,7 @@ from ._grammarless import Grammarless, GrammarlessEngine
 import tiktoken
 import os
 
-_image_token_pattern = re.compile(r"<\|_image:(.*)\|>")
+_image_token_pattern = re.compile(r"<\|_image:(.*?)\|>")
 
 
 class GoogleAIEngine(GrammarlessEngine):
