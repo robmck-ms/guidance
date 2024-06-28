@@ -44,7 +44,7 @@ class OpenAIEngine(GrammarlessEngine):
         self.model_name = model
 
         # Create a simple registry of models that use completion endpoints.
-        self._completion_models = set(
+        self._text_completion_models = set(
             [
                 "gpt-35-turbo-instruct",
                 "gpt-3.5-turbo-instruct",
@@ -52,13 +52,22 @@ class OpenAIEngine(GrammarlessEngine):
                 "davinci-002",
             ]
         )
+        self._image_completion_models = set(
+            [
+                "dall-e-3",
+                "dall-e-2",
+            ]
+        )
+        self._completion_models = self._text_completion_models.union(
+            self._image_completion_models
+        )
 
-        if tokenizer is None:
+        if tokenizer is None and model not in self._image_completion_models:
             tokenizer = tiktoken.encoding_for_model(model)
 
         super().__init__(tokenizer, max_streaming_tokens, timeout, compute_log_probs)
 
-    def _generator_completion(self, prompt, temperature, context_variables=None):
+    def _generator_text_completion(self, prompt, temperature, context_variables=None):
         # Only runs on legacy openAI models that use old completion endpoints.
         self._reset_shared_data(prompt, temperature)  # update our shared data state
 
@@ -85,6 +94,23 @@ class OpenAIEngine(GrammarlessEngine):
                 chunk = ""
             self.metrics.engine_output_tokens += len(self.tokenizer(chunk))
             yield chunk.encode("utf8")
+
+    def _generator_image_completion(self, prompt, temperature, context_variables=None):
+        try:
+            prompt_decoded = prompt.decode("utf8")
+            response = self.client.images.generate(
+                model=self.model_name,
+                prompt=prompt_decoded,
+                # TODO: Size and quality should be controllable
+                size="1024x1024",
+                # quality=quality,
+                n=1,  # TODO should be controllable
+            )
+        except Exception as e:
+            # TODO: add retry logic, but keep token counts straight
+            raise e
+
+        yield (prompt.decode("utf8") + response.data[0].url).encode("utf8")
 
     def _generator_chat(self, prompt, temperature, context_variables=None):
         # find the role tags
@@ -207,8 +233,14 @@ class OpenAIEngine(GrammarlessEngine):
             raise e
 
     def _generator(self, prompt, temperature, context_variables=None):
-        if self.model_name in self._completion_models:
-            return self._generator_completion(prompt, temperature, context_variables)
+        if self.model_name in self._text_completion_models:
+            return self._generator_text_completion(
+                prompt, temperature, context_variables
+            )
+        elif self.model_name in self._image_completion_models:
+            return self._generator_image_completion(
+                prompt, temperature, context_variables
+            )
         else:
             # Otherwise we are in a chat context
             return self._generator_chat(prompt, temperature, context_variables)
